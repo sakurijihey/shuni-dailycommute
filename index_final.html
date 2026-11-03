@@ -1,0 +1,992 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>슈니 통학길</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap">
+<style>
+/* Layout: 흰 바탕에 가는 선과 점만 쓰는 미니멀 구성. 한 화면에 하나의 행동(보물 확인 → 통학길 입력 → 이동 → 한마디 → 지도). 색은 먹색 + 주황 한 가지. */
+:root {
+  --bg: #F6F7F9;
+  --surface: #FFFFFF;
+  --ink: #15171C;
+  --mute: #6A707C;
+  --line: #E1E4EA;
+  --accent: #B43038;
+  --accent-ink: #FFFFFF;
+  --land: #EEF0F4;
+  --water: #D9E1EE;
+  --focus: #2457E6;
+  --font: "Noto Sans KR", system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E0F12; --surface: #17191E; --ink: #ECEEF2; --mute: #99A0AD; --line: #2A2E37;
+    --accent: #E4636B; --accent-ink: #1F070A; --land: #14161B; --water: #1D2638; --focus: #8FA8FF;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E0F12; --surface: #17191E; --ink: #ECEEF2; --mute: #99A0AD; --line: #2A2E37;
+  --accent: #E4636B; --accent-ink: #1F070A; --land: #14161B; --water: #1D2638; --focus: #8FA8FF;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.6;
+  word-break: keep-all; overflow-wrap: break-word; line-break: strict;
+  padding-block: 20px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+#app { max-width: 640px; margin: 0 auto; display: grid; gap: 28px; }
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+h2 { font-size: 22px; font-weight: 500; line-height: 1.4; margin: 0; text-wrap: balance; }
+.mark { font-size: 13px; font-weight: 500; color: var(--mute); letter-spacing: .08em; display: flex; align-items: center; gap: 8px; }
+.mark::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.screen { display: grid; gap: 24px; }
+.screen[hidden] { display: none; }
+.hint { color: var(--mute); font-size: 13px; }
+
+/* 1. 보물(응원 멘트) */
+#s1 { min-height: min(70vh, 560px); align-content: center; }
+.label { font-size: 12px; color: var(--mute); letter-spacing: .12em; }
+.cheer { font-size: clamp(26px, 6.6vw, 38px); font-weight: 300; line-height: 1.45; margin: 0; text-wrap: balance; }
+.rise { opacity: 0; transform: translateY(8px); }
+.rise.on { opacity: 1; transform: none; transition: opacity .7s ease, transform .7s ease; }
+.reveal { visibility: hidden; opacity: 0; transition: opacity .5s ease, visibility 0s linear .5s; }
+.reveal.on { visibility: visible; opacity: 1; transition: opacity .5s ease; }
+
+.btn { border: 0; border-radius: 999px; padding: 12px 24px; font-weight: 500; background: var(--ink); color: var(--bg); min-height: 48px; }
+.btn.accent { background: var(--accent); color: var(--accent-ink); }
+.btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+.btn.link { background: none; color: var(--mute); padding: 6px 4px; min-height: 0; font-weight: 400; text-decoration: underline; text-underline-offset: 3px; border-radius: 4px; }
+.btn:disabled { opacity: .5; cursor: default; }
+.row { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+
+/* 2. 입력 */
+.form { display: grid; gap: 26px; }
+.field { display: grid; gap: 8px; min-width: 0; }
+.field > label, .field > .lab { font-size: 13px; font-weight: 500; color: var(--mute); }
+input[type=text], input[type=number], textarea {
+  width: 100%; background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 10px 2px; min-height: 46px; font-size: 16px;
+}
+input:focus, textarea:focus { border-bottom-color: var(--ink); outline: none; }
+input:focus-visible, textarea:focus-visible { outline: none; border-bottom: 2px solid var(--focus); }
+textarea { resize: vertical; min-height: 96px; border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+textarea:focus { border-color: var(--ink); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 8px 14px; min-height: 42px; display: inline-flex; gap: 6px; align-items: center; font-size: 14px; }
+.chip[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--bg); }
+.mins { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.mins input { width: 92px; text-align: center; }
+.err { color: #C62D12; font-size: 13px; min-height: 1.3em; margin: 0; }
+:root[data-theme="dark"] .err { color: #FF8A70; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .err { color: #FF8A70; } }
+
+/* 지도 */
+.mapwrap { position: relative; border-radius: 14px; overflow: hidden; background: var(--land); height: clamp(300px, 52vh, 520px); }
+.mapwrap.short { height: clamp(240px, 34vh, 340px); }
+.mapwrap.tall { height: clamp(360px, 62vh, 600px); }
+#mapHost { position: absolute; inset: 0; }
+#mapHost canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+.zoom { position: absolute; right: 10px; top: 10px; display: grid; gap: 6px; z-index: 2; }
+.zoom[hidden] { display: none; }
+.zoom button { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); font-size: 16px; line-height: 1; }
+.maptag { position: absolute; left: 12px; top: 12px; z-index: 2; font-size: 13px; font-weight: 500; max-width: calc(100% - 70px); }
+.maptag[hidden] { display: none; }
+.sel { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 3; background: var(--surface); border-radius: 14px; padding: 16px 44px 16px 18px; display: grid; gap: 6px; box-shadow: 0 12px 28px -12px rgba(0, 0, 0, .35); }
+.sel[hidden] { display: none; }
+.sel .who { font-size: 12px; color: var(--mute); }
+.sel .msg { font-size: 17px; font-weight: 500; margin: 0; overflow-wrap: anywhere; line-height: 1.5; }
+.sel .song { font-size: 13px; color: var(--mute); overflow-wrap: anywhere; }
+.sel .x { position: absolute; right: 4px; top: 4px; width: 40px; height: 40px; border: 0; background: none; font-size: 16px; color: var(--mute); }
+.notice { border-left: 2px solid var(--accent); padding: 2px 0 2px 12px; font-size: 13px; color: var(--mute); margin: 0; }
+.notice[hidden] { display: none; }
+.count { font-size: 14px; color: var(--mute); }
+.count b { color: var(--ink); font-weight: 700; font-size: 20px; margin-right: 2px; }
+.list { display: grid; padding: 0; margin: 0; list-style: none; }
+.list li { border-top: 1px solid var(--line); }
+.item { background: none; border: 0; padding: 16px 2px; display: grid; gap: 4px; text-align: left; width: 100%; border-radius: 6px; }
+.item .top { font-size: 12px; color: var(--mute); display: flex; gap: 8px; flex-wrap: wrap; }
+.item .top .tag { color: var(--accent); font-weight: 700; }
+.item .m { margin: 0; overflow-wrap: anywhere; }
+.item .s { font-size: 13px; color: var(--mute); overflow-wrap: anywhere; }
+.item.on .m { font-weight: 700; }
+.empty { color: var(--mute); padding: 20px 2px; }
+
+/* 이동 모션 화면 */
+.motion-cap { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 14px; color: var(--mute); }
+.motion-cap b { color: var(--ink); font-weight: 500; }
+
+/* 로딩: 통학 수단이 지나감 */
+#sLoad { min-height: min(60vh, 440px); align-content: center; justify-items: stretch; }
+.track { position: relative; height: 44px; }
+.track::before { content: ""; position: absolute; left: 0; right: 0; bottom: 6px; border-bottom: 1px solid var(--ink); }
+.track .veh { position: absolute; bottom: 8px; left: 0; font-size: 28px; line-height: 1; will-change: transform; }
+.track .dot { position: absolute; right: 0; bottom: 1px; width: 11px; height: 11px; border-radius: 50%; background: var(--accent); }
+@media (prefers-reduced-motion: no-preference) {
+  .track .veh { animation: pass 1.7s cubic-bezier(.45, 0, .55, 1) infinite; }
+  @keyframes pass { from { left: -8%; opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } to { left: 100%; opacity: 0; } }
+  .screen:not(#s1) { animation: fade .3s ease both; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+}
+@media (prefers-reduced-motion: reduce) { .track .veh { left: 45%; } .rise, .reveal { transition: none !important; } }
+
+/* 관리 */
+.a-tools { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.a-tools input[type=text] { flex: 1 1 180px; width: auto; }
+.a-tools select { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 9px 14px; min-height: 42px; font: inherit; color: var(--ink); }
+.a-sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 20px 16px; }
+.a-stat { display: grid; gap: 2px; }
+.a-v { font-size: 26px; font-weight: 300; line-height: 1.2; }
+.a-l { font-size: 12px; color: var(--mute); }
+.a-bars { display: grid; gap: 8px; }
+.a-bar { display: grid; grid-template-columns: minmax(7em, 13em) 1fr 2.5em; gap: 10px; align-items: center; font-size: 13px; }
+.a-bar i { display: block; height: 4px; background: var(--ink); border-radius: 2px; min-width: 2px; }
+.a-bar span:last-child { color: var(--mute); text-align: right; }
+.a-row { border-top: 1px solid var(--line); padding: 14px 2px; display: grid; gap: 4px; }
+.a-row .top { font-size: 12px; color: var(--mute); display: flex; gap: 8px; flex-wrap: wrap; }
+.a-row .m { margin: 0; overflow-wrap: anywhere; }
+.a-row .s { font-size: 13px; color: var(--mute); overflow-wrap: anywhere; }
+.a-row .del { justify-self: start; margin-top: 4px; border: 1px solid var(--line); background: none; border-radius: 999px; padding: 5px 14px; font-size: 13px; color: var(--mute); min-height: 34px; }
+.a-row .del.arm { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+#toAdmin[hidden] { display: none; }
+
+/* 설문: 질문 하나당 한 화면 */
+#sSurvey { min-height: min(72vh, 560px); align-content: start; gap: 22px; }
+.qhead { display: flex; align-items: center; gap: 14px; font-size: 13px; color: var(--mute); }
+.qbar { flex: 1; height: 2px; background: var(--line); position: relative; }
+.qbar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); transition: width .3s ease; }
+.qlead { margin: 0; font-size: 13px; color: var(--mute); }
+.qlead[hidden] { display: none; }
+.qbody { display: grid; gap: 10px; }
+.opt { text-align: left; border: 1px solid var(--line); background: transparent; border-radius: 14px; padding: 15px 16px; min-height: 54px; font-size: 16px; }
+.opt[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--bg); }
+.qbody textarea { min-height: 140px; }
+</style>
+
+</head>
+<body>
+<div id="app">
+  <div class="mark">슈니 통학길</div>
+
+  <section class="screen" id="s1">
+    <div class="label rise" id="lab1">오늘의 보물</div>
+    <p class="cheer rise" id="cheer" aria-live="polite"></p>
+    <div class="row reveal" id="next1">
+      <button class="btn" id="go2" type="button">내 통학길 남기기</button>
+    </div>
+  </section>
+
+  <section class="screen" id="s2" hidden>
+    <h2>어디서 출발해서,<br>뭘 타고 오셨나요?</h2>
+    <div class="form">
+      <div class="field">
+        <label for="origin">출발지</label>
+        <input type="text" id="origin" list="placeList" autocomplete="off" placeholder="역·동네 검색 (예: 수원, 일산, 강남)">
+        <datalist id="placeList"></datalist>
+        <span class="hint">목록에 없으면 지도를 눌러 대략적인 위치를 찍어주세요. 정확한 집 위치는 저장하지 않아요.</span>
+      </div>
+      <div class="mapwrap short" id="slot2"></div>
+      <div class="field">
+        <span class="lab" id="modeLab">이동수단</span>
+        <div class="chips" id="modes" role="group" aria-labelledby="modeLab"></div>
+      </div>
+      <div class="field">
+        <label for="mins">걸린 시간 (분)</label>
+        <div class="mins">
+          <input type="number" id="mins" inputmode="numeric" min="1" max="300" placeholder="40">
+          <div class="chips" id="minQuick"></div>
+        </div>
+      </div>
+      <p class="err" id="err2" role="alert"></p>
+      <div class="row">
+        <button class="btn accent" id="go3" type="button">완료</button>
+        <button class="btn link" id="back1" type="button">처음으로</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen" id="s3" hidden>
+    <div class="motion-cap" id="cap3" aria-live="polite"></div>
+    <div class="mapwrap tall" id="slot3"></div>
+  </section>
+
+  <section class="screen" id="sSurvey" hidden>
+    <div class="qhead"><span id="qStep"></span><div class="qbar" aria-hidden="true"><i id="qFill"></i></div></div>
+    <p class="qlead" id="qLead"></p>
+    <h2 id="qT" tabindex="-1"></h2>
+    <div id="qBody"></div>
+    <p class="err" id="err3" role="alert"></p>
+    <div class="row">
+      <button class="btn accent" id="qNext" type="button">다음</button>
+      <button class="btn link" id="qBack" type="button">이전</button>
+    </div>
+  </section>
+
+  <section class="screen" id="sLoad" hidden>
+    <div class="track" aria-hidden="true"><span class="veh" id="veh">🚇</span><span class="dot"></span></div>
+    <p class="hint" role="status" style="margin:0;text-align:center">지도에 통학길을 그리는 중이에요</p>
+  </section>
+
+  <section class="screen" id="s4" hidden>
+    <div class="row" style="justify-content:space-between">
+      <h2>슈니들의 통학길</h2>
+      <span class="row"><button class="btn link" id="toAdmin" type="button" hidden>관리</button><button class="btn ghost" id="again" type="button">다시 남기기</button></span>
+    </div>
+    <div class="count" id="count"></div>
+    <p class="notice" id="notice" hidden></p>
+    <div class="mapwrap" id="slot4">
+      <div class="sel" id="sel" hidden></div>
+    </div>
+    <p class="hint" id="mapHint" style="margin:-12px 0 0">선이나 점을 누르거나, 아래 목록에서 슈니들의 한마디를 볼 수 있어요.</p>
+    <ul class="list" id="list"></ul>
+  </section>
+
+  <section class="screen" id="sAdmin" hidden>
+    <div class="row" style="justify-content:space-between">
+      <h2>응답 관리</h2>
+      <span class="row"><button class="btn link" id="adminOut" type="button" hidden>로그아웃</button><button class="btn link" id="adminBack" type="button">지도로</button></span>
+    </div>
+    <div id="adminGate"></div>
+    <div id="adminMain" hidden class="screen">
+      <div class="a-sum" id="adminSum"></div>
+      <div class="a-bars" id="adminBars"></div>
+      <div class="a-tools">
+        <input type="text" id="adminQ" placeholder="한마디·출발지·닉네임 검색" aria-label="검색">
+        <select id="adminMode" aria-label="이동수단 필터"><option value="">전체 수단</option></select>
+        <button class="btn ghost" id="adminCsv" type="button">CSV 저장</button>
+      </div>
+      <p class="err" id="adminErr" role="alert"></p>
+      <div class="count" id="adminCount"></div>
+      <div id="adminList"></div>
+    </div>
+  </section>
+
+  <div id="stash" hidden><div id="mapHost">
+    <canvas id="cv" role="img" aria-label="수도권 지도 위에 슈니들의 통학 경로를 선으로 그린 그림"></canvas>
+    <div class="zoom" id="zoom">
+      <button type="button" id="zin" aria-label="확대">+</button>
+      <button type="button" id="zout" aria-label="축소">−</button>
+      <button type="button" id="zfit" aria-label="전체 보기">○</button>
+    </div>
+    <div class="maptag" id="maptag" hidden></div>
+  </div></div>
+</div>
+
+<script>
+/* Firebase 연결 전에 페이지 코드가 쓸 수 있도록 저장소 연결 창구를 먼저 만든다 */
+(function () {
+  var res; var ready = new Promise(function (r) { res = r; });
+  window.__fbResolve = res;
+  setTimeout(function () { res(null); }, 12000);
+  window.claude = { use: function (name) { return ready.then(function (api) { return api ? (api[name] || null) : null; }); } };
+})();
+</script>
+<script>
+(function () {
+  'use strict';
+  /* ---------- 설정 ---------- */
+  var DEST = { name: '서울여대', lat: 37.6290, lng: 127.0900 };
+  var CHEERS = [
+    '오늘도 여기까지 온 것만으로 충분해요.',
+    '졸면서 온 길도 통학은 통학이에요.',
+    '환승 한 번 놓쳐도 괜찮아요. 다음 차가 와요.',
+    '길 위에서 쓴 시간도 전부 슈니의 시간이에요.',
+    '피곤한 날에도 도착하는 사람이 결국 이겨요.',
+    '오늘 가장 먼 곳에서 온 슈니에게 박수를 보내요.',
+    '이어폰 속 노래 한 곡이 오늘 하루를 데려다줄 거예요.',
+    '손잡이 잡고 버틴 시간이 쌓여 졸업장이 돼요.',
+    '비 오는 날 통학한 슈니에게 특별한 응원을 보내요.',
+    '오늘 놓친 버스보다 오늘 도착한 당신이 더 대단해요.',
+    '지각 직전에 뛰어온 속도, 꽤 멋졌어요.',
+    '매일 같은 길도 오늘은 조금 다르게 보이길 바라요.',
+    '돌아가는 길은 오는 길보다 가볍기를.',
+    '밥은 꼭 챙겨 먹고, 그래도 괜찮은 하루예요.',
+    '오늘의 슈니는 어제보다 한 정거장 더 멀리 가요.'
+  ];
+  var MODES = [
+    { id: 'subway', label: '지하철', emoji: '🚇' },
+    { id: 'bus', label: '버스', emoji: '🚌' },
+    { id: 'train', label: '기차·광역철도', emoji: '🚆' },
+    { id: 'car', label: '자가용', emoji: '🚗' },
+    { id: 'taxi', label: '택시', emoji: '🚕' },
+    { id: 'bike', label: '자전거·킥보드', emoji: '🚲' },
+    { id: 'walk', label: '도보', emoji: '🚶' }
+  ];
+  var MODE_BY_ID = {}; MODES.forEach(function (m) { MODE_BY_ID[m.id] = m; });
+  var PLACES = [
+    ['공릉', 37.6258, 127.0731], ['화랑대', 37.6200, 127.0840], ['태릉입구', 37.6176, 127.0750], ['석계', 37.6146, 127.0657],
+    ['광운대', 37.6236, 127.0616], ['월계', 37.6290, 127.0580], ['하계', 37.6361, 127.0678], ['중계', 37.6446, 127.0640],
+    ['상계', 37.6612, 127.0732], ['당고개', 37.6700, 127.0794], ['노원', 37.6552, 127.0614], ['창동', 37.6532, 127.0476],
+    ['쌍문', 37.6486, 127.0346], ['도봉산', 37.6896, 127.0460], ['수유', 37.6381, 127.0253], ['미아사거리', 37.6130, 127.0300],
+    ['길음', 37.6033, 127.0250], ['성신여대입구', 37.5927, 127.0165], ['한성대입구', 37.5885, 127.0063], ['혜화', 37.5820, 127.0018],
+    ['먹골', 37.6106, 127.0777], ['망우', 37.5990, 127.0916], ['상봉', 37.5965, 127.0853], ['회기', 37.5896, 127.0575],
+    ['청량리', 37.5800, 127.0470], ['왕십리', 37.5612, 127.0371], ['동대문', 37.5712, 127.0098], ['건대입구', 37.5404, 127.0693],
+    ['성수', 37.5446, 127.0560], ['잠실', 37.5133, 127.1001], ['강남', 37.4979, 127.0276], ['교대', 37.4934, 127.0140],
+    ['양재', 37.4845, 127.0342], ['사당', 37.4766, 126.9816], ['서울대입구', 37.4813, 126.9527], ['신림', 37.4843, 126.9297],
+    ['노량진', 37.5133, 126.9423], ['용산', 37.5299, 126.9648], ['이태원', 37.5345, 126.9946], ['고속터미널', 37.5049, 127.0049],
+    ['압구정', 37.5270, 127.0283], ['여의도', 37.5216, 126.9243], ['영등포', 37.5159, 126.9076], ['신도림', 37.5088, 126.8913],
+    ['구로디지털단지', 37.4852, 126.9015], ['가산디지털단지', 37.4816, 126.8827], ['오목교(목동)', 37.5240, 126.8750],
+    ['마곡나루', 37.5667, 126.8272], ['김포공항', 37.5625, 126.8014], ['상암 DMC', 37.5766, 126.9014], ['연신내', 37.6190, 126.9211],
+    ['불광', 37.6103, 126.9300], ['구파발', 37.6368, 126.9186], ['신촌', 37.5551, 126.9368], ['홍대입구', 37.5572, 126.9245],
+    ['합정', 37.5496, 126.9139], ['서울역', 37.5547, 126.9707], ['광화문', 37.5712, 126.9769], ['시청', 37.5658, 126.9772],
+    ['천호', 37.5385, 127.1238], ['강동', 37.5359, 127.1325], ['송파', 37.5112, 127.1121], ['수서', 37.4874, 127.1017],
+    ['일산(대화)', 37.6762, 126.7473], ['정발산(일산)', 37.6596, 126.7737], ['운정(파주)', 37.7258, 126.7667], ['화정(고양)', 37.6341, 126.8326],
+    ['부천', 37.4840, 126.7828], ['광명', 37.4166, 126.8849], ['안양', 37.4018, 126.9227], ['과천', 37.4290, 126.9877],
+    ['의왕', 37.3447, 126.9683], ['군포', 37.3616, 126.9352], ['수원', 37.2656, 127.0000], ['판교(성남)', 37.3948, 127.1112],
+    ['서현(분당)', 37.3846, 127.1230], ['수지(용인)', 37.3220, 127.0955], ['하남', 37.5395, 127.2060], ['구리', 37.6032, 127.1437],
+    ['다산(남양주)', 37.6125, 127.1560], ['별내(남양주)', 37.6420, 127.1280], ['의정부', 37.7382, 127.0460], ['안산', 37.3267, 126.8458],
+    ['시흥', 37.3800, 126.8030], ['부평(인천)', 37.4896, 126.7226], ['송도(인천)', 37.3929, 126.6393], ['계양(인천)', 37.5372, 126.7378],
+    ['청라(인천)', 37.5336, 126.6401], ['구월(인천)', 37.4486, 126.7053]
+  ];
+  var PLACE_BY_NAME = {}; PLACES.forEach(function (p) { PLACE_BY_NAME[p[0]] = p; });
+  var REF_LABELS = [['서울역', 37.5547, 126.9707], ['강남', 37.4979, 127.0276], ['잠실', 37.5133, 127.1001], ['여의도', 37.5216, 126.9243],
+    ['수원', 37.2656, 127.0000], ['일산', 37.6762, 126.7473], ['인천', 37.4560, 126.7050], ['판교', 37.3948, 127.1112], ['의정부', 37.7382, 127.0460]];
+  var RIVER = [[37.5270, 127.2870], [37.5530, 127.1500], [37.5200, 127.0900], [37.5320, 127.0260], [37.5290, 126.9900], [37.5100, 126.9500],
+    [37.5230, 126.9300], [37.5400, 126.9000], [37.5700, 126.8300], [37.6000, 126.7500], [37.6400, 126.6900], [37.6900, 126.6200]];
+  var SEA = [[37.80, 126.45], [37.65, 126.52], [37.55, 126.58], [37.47, 126.60], [37.42, 126.62], [37.36, 126.68], [37.32, 126.72], [37.27, 126.80], [37.25, 126.80], [37.25, 126.45]];
+
+  /* ---------- 유틸 ---------- */
+  var $ = function (s) { return document.querySelector(s); };
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function hash(str) { var h = 0; for (var i = 0; i < str.length; i++) { h = (h * 31 + str.charCodeAt(i)) | 0; } return Math.abs(h); }
+  function clean(s, n) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim().slice(0, n); }
+  function segDist(px, py, ax, ay, bx, by) {
+    var dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+    var t = l2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2)) : 0;
+    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+  }
+
+  /* ---------- 지도 ---------- */
+  var LAT0 = 37.5, K = Math.cos(LAT0 * Math.PI / 180);
+  function wx(lng) { return (lng - 127) * K; }
+  function wy(lat) { return LAT0 - lat; }
+  var METRO = [[37.27, 126.62], [37.76, 127.28]];
+
+  function CommuteMap(host) {
+    var self = this;
+    this.host = host; this.cv = host.querySelector('canvas'); this.ctx = this.cv.getContext('2d');
+    this.entries = []; this.selId = null; this.pickPt = null; this.pickMode = false;
+    this.view = { cx: 0, cy: 0, s: 1 }; this.W = 0; this.H = 0; this.dpr = 1; this.baseS = 0;
+    this.reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.running = false; this.queued = false; this.onPick = null; this.onHit = null; this.hits = [];
+    this.pointers = {}; this.moved = 0;
+    this.readColors();
+    if (window.ResizeObserver) { new ResizeObserver(function () { self.resize(); }).observe(host); }
+    window.addEventListener('resize', function () { self.resize(); });
+    var mq = matchMedia('(prefers-color-scheme: dark)');
+    var onTheme = function () { self.readColors(); self.invalidate(); };
+    if (mq.addEventListener) mq.addEventListener('change', onTheme);
+    new MutationObserver(onTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    this.bind();
+  }
+  CommuteMap.prototype.readColors = function () {
+    var cs = getComputedStyle(document.documentElement);
+    var g = function (n) { return cs.getPropertyValue(n).trim(); };
+    this.c = { land: g('--land'), water: g('--water'), ink: g('--ink'), mute: g('--mute'), surface: g('--surface'), accent: g('--accent') };
+  };
+  CommuteMap.prototype.resize = function () {
+    var w = this.host.clientWidth, h = this.host.clientHeight;
+    if (!w || !h) return;
+    var first = !this.baseS;
+    this.W = w; this.H = h; this.dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    this.cv.width = Math.round(w * this.dpr); this.cv.height = Math.round(h * this.dpr);
+    var s0 = this.fitScale(METRO, 0);
+    var ratio = this.baseS ? this.view.s / this.baseS : 1;
+    this.baseS = s0;
+    if (first) { this.fitTo(METRO, 0); } else { this.view.s = s0 * ratio; this.clamp(); }
+    this.invalidate();
+  };
+  CommuteMap.prototype.bbox = function (pts) {
+    var x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    pts.forEach(function (p) { var x = wx(p[1]), y = wy(p[0]); x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); });
+    return { x0: x0, x1: x1, y0: y0, y1: y1 };
+  };
+  CommuteMap.prototype.fitScale = function (pts, pad) {
+    var b = this.bbox(pts); var dx = Math.max(b.x1 - b.x0, 0.07), dy = Math.max(b.y1 - b.y0, 0.07);
+    return Math.min(this.W / (dx * (1 + pad * 2)), this.H / (dy * (1 + pad * 2)));
+  };
+  CommuteMap.prototype.fitTo = function (pts, pad) {
+    if (!this.W) return;
+    pad = pad == null ? 0.22 : pad;
+    var b = this.bbox(pts);
+    this.view.s = this.fitScale(pts, pad);
+    this.view.cx = (b.x0 + b.x1) / 2; this.view.cy = (b.y0 + b.y1) / 2;
+    this.clamp(); this.invalidate();
+  };
+  CommuteMap.prototype.clamp = function () {
+    var lo = this.baseS * 0.7, hi = this.baseS * 60;
+    this.view.s = Math.max(lo, Math.min(hi, this.view.s));
+  };
+  CommuteMap.prototype.zoomBy = function (f, sx, sy) {
+    var v = this.view; sx = sx == null ? this.W / 2 : sx; sy = sy == null ? this.H / 2 : sy;
+    var ax = (sx - this.W / 2) / v.s + v.cx, ay = (sy - this.H / 2) / v.s + v.cy;
+    v.s *= f; this.clamp();
+    v.cx = ax - (sx - this.W / 2) / v.s; v.cy = ay - (sy - this.H / 2) / v.s;
+    this.invalidate();
+  };
+  CommuteMap.prototype.xy = function (lat, lng) {
+    var v = this.view; return [(wx(lng) - v.cx) * v.s + this.W / 2, (wy(lat) - v.cy) * v.s + this.H / 2];
+  };
+  CommuteMap.prototype.latlng = function (x, y) {
+    var v = this.view; var ex = (x - this.W / 2) / v.s + v.cx, ey = (y - this.H / 2) / v.s + v.cy;
+    return [LAT0 - ey, ex / K + 127];
+  };
+  CommuteMap.prototype.bind = function () {
+    var self = this, cv = this.cv;
+    cv.addEventListener('pointerdown', function (e) {
+      cv.setPointerCapture(e.pointerId);
+      self.pointers[e.pointerId] = { x: e.offsetX, y: e.offsetY };
+      self.moved = 0; cv.style.cursor = 'grabbing';
+    });
+    cv.addEventListener('pointermove', function (e) {
+      var p = self.pointers[e.pointerId]; if (!p) return;
+      var ids = Object.keys(self.pointers);
+      var nx = e.offsetX, ny = e.offsetY;
+      if (ids.length === 1) {
+        self.view.cx -= (nx - p.x) / self.view.s; self.view.cy -= (ny - p.y) / self.view.s;
+        self.moved += Math.abs(nx - p.x) + Math.abs(ny - p.y);
+      } else if (ids.length === 2) {
+        var o = self.pointers[ids.filter(function (i) { return +i !== e.pointerId; })[0]];
+        var d0 = Math.hypot(p.x - o.x, p.y - o.y), d1 = Math.hypot(nx - o.x, ny - o.y);
+        if (d0 > 5) self.zoomBy(d1 / d0, (nx + o.x) / 2, (ny + o.y) / 2);
+        self.moved += 20;
+      }
+      p.x = nx; p.y = ny; self.invalidate();
+    });
+    var up = function (e) {
+      var had = self.pointers[e.pointerId]; delete self.pointers[e.pointerId];
+      cv.style.cursor = 'grab';
+      if (had && self.moved < 6 && Object.keys(self.pointers).length === 0 && e.type === 'pointerup') self.tap(e.offsetX, e.offsetY);
+    };
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    cv.addEventListener('wheel', function (e) { e.preventDefault(); self.zoomBy(e.deltaY < 0 ? 1.25 : 0.8, e.offsetX, e.offsetY); }, { passive: false });
+  };
+  CommuteMap.prototype.tap = function (x, y) {
+    var best = null, bd = 1e9;
+    this.hits.forEach(function (h) {
+      var dd = Math.hypot(h.ox - x, h.oy - y);
+      var d = dd < 16 ? dd : segDist(x, y, h.ox, h.oy, h.dx, h.dy) + 6;
+      if (d < bd) { bd = d; best = h.e; }
+    });
+    if (best && bd < 16 && this.onHit) { this.onHit(best); return; }
+    if (this.pickMode && this.onPick) { var ll = this.latlng(x, y); this.onPick(ll[0], ll[1]); }
+  };
+  CommuteMap.prototype.start = function () {
+    var self = this;
+    if (this.reduce) { this.invalidate(); return; }
+    if (this.running) return; this.running = true;
+    var tick = function (t) { if (!self.running) return; self.draw(t); requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  };
+  CommuteMap.prototype.stop = function () { this.running = false; };
+  CommuteMap.prototype.invalidate = function () {
+    var self = this;
+    if (this.running || this.queued) return;
+    this.queued = true;
+    requestAnimationFrame(function (t) { self.queued = false; self.draw(t); });
+  };
+  CommuteMap.prototype.draw = function (now) {
+    if (!this.W) return;
+    var ctx = this.ctx, c = this.c, self = this, s = this.view.s;
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.clearRect(0, 0, this.W, this.H);
+    ctx.fillStyle = c.land; ctx.fillRect(0, 0, this.W, this.H);
+    ctx.beginPath();
+    SEA.forEach(function (p, i) { var q = self.xy(p[0], p[1]); if (i) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]); });
+    ctx.closePath(); ctx.fillStyle = c.water; ctx.fill();
+    ctx.beginPath();
+    RIVER.forEach(function (p, i) { var q = self.xy(p[0], p[1]); if (i) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]); });
+    ctx.strokeStyle = c.water; ctx.lineWidth = Math.max(3, 0.006 * s); ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+    ctx.font = '400 11px "Noto Sans KR", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    REF_LABELS.forEach(function (r) {
+      var q = self.xy(r[1], r[2]); if (q[0] < -20 || q[0] > self.W + 20 || q[1] < -20 || q[1] > self.H + 20) return;
+      ctx.globalAlpha = 0.55; ctx.fillStyle = c.mute; ctx.fillText(r[0], q[0], q[1]); ctx.globalAlpha = 1;
+    });
+
+    var D = this.xy(DEST.lat, DEST.lng);
+    var t0 = (now || 0) / 1000;
+    this.hits = [];
+    var drawOne = function (e) {
+      var O = self.xy(e.lat, e.lng), sel = e.id === self.selId, mine = !!e.mine;
+      ctx.beginPath(); ctx.moveTo(O[0], O[1]); ctx.lineTo(D[0], D[1]);
+      ctx.strokeStyle = mine ? c.accent : c.ink;
+      ctx.globalAlpha = sel ? 0.95 : (mine ? 0.9 : 0.3); ctx.lineWidth = sel ? 2 : (mine ? 1.6 : 1); ctx.lineCap = 'round'; ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.arc(O[0], O[1], mine || sel ? 4.5 : 3, 0, 6.283);
+      ctx.fillStyle = mine ? c.accent : c.ink; ctx.globalAlpha = mine || sel ? 1 : 0.6; ctx.fill(); ctx.globalAlpha = 1;
+      if (sel) { ctx.beginPath(); ctx.arc(O[0], O[1], 10, 0, 6.283); ctx.strokeStyle = c.ink; ctx.lineWidth = 1.5; ctx.stroke(); }
+      if (e.motion) {
+        var t = self.reduce ? 1 : Math.max(0, Math.min(1, (t0 - e.startAt) / e.dur));
+        t = t * t * (3 - 2 * t);
+        var P = [O[0] + (D[0] - O[0]) * t, O[1] + (D[1] - O[1]) * t];
+        ctx.beginPath(); ctx.moveTo(O[0], O[1]); ctx.lineTo(P[0], P[1]); ctx.strokeStyle = c.accent; ctx.lineWidth = 2.5; ctx.stroke();
+        ctx.beginPath(); ctx.arc(P[0], P[1], 17, 0, 6.283); ctx.fillStyle = c.surface; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = c.accent; ctx.stroke();
+        ctx.font = '20px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = c.ink; ctx.fillText((MODE_BY_ID[e.mode] || MODES[0]).emoji, P[0], P[1] + 1);
+      }
+      if (!e.motion) self.hits.push({ ox: O[0], oy: O[1], dx: D[0], dy: D[1], e: e });
+    };
+    var mineE = null;
+    this.entries.forEach(function (e) { if (e.mine) { mineE = e; } else { drawOne(e); } });
+    if (mineE) drawOne(mineE);
+    if (this.pickPt) {
+      var pp = this.xy(this.pickPt[0], this.pickPt[1]);
+      ctx.beginPath(); ctx.arc(pp[0], pp[1], 5, 0, 6.283); ctx.fillStyle = c.accent; ctx.fill();
+      ctx.beginPath(); ctx.arc(pp[0], pp[1], 12, 0, 6.283); ctx.strokeStyle = c.accent; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(pp[0], pp[1]); ctx.lineTo(D[0], D[1]); ctx.strokeStyle = c.accent; ctx.globalAlpha = 0.45; ctx.setLineDash([4, 5]); ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+    }
+    var pulse = this.reduce ? 0.5 : ((t0 % 2.4) / 2.4);
+    ctx.beginPath(); ctx.arc(D[0], D[1], 7 + pulse * 16, 0, 6.283); ctx.strokeStyle = c.accent; ctx.globalAlpha = (1 - pulse) * 0.8; ctx.lineWidth = 1.5; ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.arc(D[0], D[1], 6, 0, 6.283); ctx.fillStyle = c.accent; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = c.surface; ctx.stroke();
+    ctx.font = '700 12px "Noto Sans KR", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = c.ink;
+    ctx.fillText(DEST.name, D[0], D[1] - 14);
+  };
+
+  /* ---------- 상태 ---------- */
+  var map = new CommuteMap($('#mapHost'));
+  var blank = function () { return { name: '', lat: null, lng: null, mode: 'subway', minutes: null }; };
+  var state = { screen: '', draft: blank(), remote: [], local: [], mineId: null, canWrite: null, dbDown: false, fitted: false };
+  var db = null, motionTimer = null;
+  var screens = { intro: $('#s1'), form: $('#s2'), motion: $('#s3'), survey: $('#sSurvey'), load: $('#sLoad'), map: $('#s4'), admin: $('#sAdmin') };
+  var slots = { form: $('#slot2'), motion: $('#slot3'), map: $('#slot4') };
+
+  function leaveTimers() { if (motionTimer) { clearTimeout(motionTimer); motionTimer = null; } }
+  function show(name) {
+    leaveTimers();
+    state.screen = name;
+    Object.keys(screens).forEach(function (k) { screens[k].hidden = k !== name; });
+    var slot = slots[name];
+    if (slot) { slot.insertBefore($('#mapHost'), slot.firstChild); map.start(); } else { map.stop(); $('#stash').appendChild($('#mapHost')); }
+    $('#zoom').hidden = name === 'motion';
+    $('#maptag').hidden = true;
+    map.pickMode = name === 'form'; map.onPick = name === 'form' ? onPick : null; map.onHit = name === 'map' ? onHit : null;
+    map.selId = null;
+    if (name === 'form') {
+      map.entries = []; map.pickPt = state.draft.lat != null ? [state.draft.lat, state.draft.lng] : null;
+      requestAnimationFrame(function () { map.resize(); if (map.pickPt) map.fitTo([map.pickPt, [DEST.lat, DEST.lng]], 0.3); else map.fitTo(METRO, 0); });
+    }
+    if (name === 'motion') playMotion();
+    if (name === 'load') { $('#veh').textContent = MODE_BY_ID[state.draft.mode].emoji; }
+    if (name === 'map') { map.pickPt = null; renderAll(true); }
+    if (name === 'admin') renderAdmin();
+    if (name === 'survey') renderQ();
+    window.scrollTo(0, 0);
+    try { history.replaceState(null, '', name === 'admin' ? '#admin' : location.pathname + location.search); } catch (e) { /* 일부 환경에서는 허용되지 않음 */ }
+  }
+
+  /* ---------- 1. 오늘의 보물 ---------- */
+  function startIntro() {
+    $('#cheer').textContent = CHEERS[Math.floor(Math.random() * CHEERS.length)];
+    requestAnimationFrame(function () { requestAnimationFrame(function () { $('#lab1').classList.add('on'); $('#cheer').classList.add('on'); }); });
+    setTimeout(function () { $('#next1').classList.add('on'); }, 1500);
+  }
+  $('#go2').onclick = function () { show('form'); };
+
+  /* ---------- 2. 통학길 입력 ---------- */
+  var dl = $('#placeList'); PLACES.forEach(function (p) { var o = document.createElement('option'); o.value = p[0]; dl.appendChild(o); });
+  var modesBox = $('#modes');
+  MODES.forEach(function (m) {
+    var b = el('button', 'chip'); b.type = 'button'; b.dataset.id = m.id;
+    b.appendChild(el('span', null, m.emoji)); b.appendChild(el('span', null, m.label));
+    b.onclick = function () { state.draft.mode = m.id; syncModes(); };
+    modesBox.appendChild(b);
+  });
+  function syncModes() { Array.prototype.forEach.call(modesBox.children, function (b) { b.setAttribute('aria-pressed', String(b.dataset.id === state.draft.mode)); }); }
+  syncModes();
+  [10, 20, 30, 45, 60, 90].forEach(function (v) {
+    var b = el('button', 'chip', v + '분'); b.type = 'button';
+    b.onclick = function () { $('#mins').value = v; };
+    $('#minQuick').appendChild(b);
+  });
+  function onPick(lat, lng) {
+    lat = Math.round(lat * 100) / 100; lng = Math.round(lng * 100) / 100; /* 약 1km 단위로만 저장 */
+    state.draft.lat = lat; state.draft.lng = lng; map.pickPt = [lat, lng];
+    var inp = $('#origin'); if (!PLACE_BY_NAME[inp.value] && !inp.value) inp.value = '지도에서 고른 곳';
+    map.invalidate();
+  }
+  $('#origin').addEventListener('input', function () {
+    var p = PLACE_BY_NAME[this.value];
+    if (p) { state.draft.lat = p[1]; state.draft.lng = p[2]; map.pickPt = [p[1], p[2]]; map.fitTo([map.pickPt, [DEST.lat, DEST.lng]], 0.3); }
+  });
+  $('#back1').onclick = function () { show('intro'); };
+  $('#go3').onclick = function () {
+    var d = state.draft, err = $('#err2');
+    var name = clean($('#origin').value, 30), mins = parseInt($('#mins').value, 10);
+    if (!name) { err.textContent = '출발지를 입력하거나 목록에서 골라주세요.'; return; }
+    if (d.lat == null) { err.textContent = '위치를 정해야 지도에 그릴 수 있어요. 목록에서 고르거나 지도를 눌러주세요.'; return; }
+    if (!(mins >= 1 && mins <= 300)) { err.textContent = '걸린 시간을 1~300분 사이로 입력해주세요.'; return; }
+    err.textContent = ''; d.name = name; d.minutes = mins;
+    show('motion');
+  };
+
+  /* ---------- 3. 이동 모션 → 한마디 창 ---------- */
+  function playMotion() {
+    var d = state.draft, m = MODE_BY_ID[d.mode];
+    var cap = $('#cap3'); cap.textContent = '';
+    cap.appendChild(el('b', null, d.name)); cap.appendChild(el('span', null, '→ ' + DEST.name)); cap.appendChild(el('span', null, m.emoji + ' ' + m.label + ' ' + d.minutes + '분'));
+    map.pickPt = null;
+    map.entries = [{ id: 'draft', lat: d.lat, lng: d.lng, mode: d.mode, minutes: d.minutes, mine: true, motion: true, dur: 3, startAt: performance.now() / 1000 + 0.4 }];
+    requestAnimationFrame(function () { map.resize(); map.fitTo([[d.lat, d.lng], [DEST.lat, DEST.lng]], 0.3); });
+    motionTimer = setTimeout(function () { state.qi = 0; show('survey'); }, 4000);
+  }
+
+  /* ---------- 설문 (질문 하나당 한 화면) ---------- */
+  var FOUND = [{ id: 'msg', label: '응원 메시지' }, { id: 'snack', label: '간식' }, { id: 'photo', label: '사진' }, { id: 'etc', label: '기타' }];
+  var PLACE = [{ id: 'shuttle', label: '역 앞 셔틀정류장' }, { id: 'campus', label: '캠퍼스 안' }, { id: 'gate', label: '정문 오는 길' }];
+  var FEEL = [{ id: 'fun', label: '재미있고 신기했다' }, { id: 'comfort', label: '위로나 기쁨을 느꼈다' }, { id: 'new', label: '주변을 새롭게 바라보게 되었다' }, { id: 'none', label: '특별한 감정은 없었다' }];
+  function labelOf(arr, id) { for (var i = 0; i < arr.length; i++) { if (arr[i].id === id) return arr[i].label; } return ''; }
+  function pickId(arr, id) { return labelOf(arr, id) ? id : ''; }
+  var QS = [
+    { key: 'found', type: 'choice', title: '어떤 보물을 발견했나요?', opts: FOUND },
+    { key: 'place', type: 'choice', title: '어디에서 보물을 발견했나요?', opts: PLACE },
+    { key: 'feeling', type: 'choice', title: '보물을 발견한 순간 어떤 기분이 들었나요?', opts: FEEL },
+    { key: 'treasure', type: 'text', title: '오늘 일상에서 발견한 작은 보물은 무엇인가요?', hint: '자유롭게 적어주세요!', ph: '예) 정류장 앞 노을, 친구가 건넨 사탕' },
+    { key: 'message', type: 'text', title: '다음 사람에게 전하고 싶은 메시지가 있나요?', hint: '자유롭게 적어주세요! 이 메시지가 지도에 남아요.', ph: '예) 오늘도 고생 많았어요! 통학길에 듣기 좋은 노래 추천해요, 지금 이 노래 한 곡 어때요?' }
+  ];
+  state.ans = {}; state.qi = 0;
+  function renderQ() {
+    var q = QS[state.qi], a = state.ans, body = $('#qBody'); body.textContent = '';
+    var sc = $('#sSurvey'); sc.style.animation = 'none'; void sc.offsetWidth; sc.style.animation = '';
+    $('#qStep').textContent = (state.qi + 1) + ' / ' + QS.length;
+    $('#qFill').style.width = ((state.qi + 1) / QS.length * 100) + '%';
+    $('#qLead').textContent = '일상 속 보물찾기 — 보물을 발견했다면, 그 순간의 경험을 공유해 주세요.';
+    $('#qLead').hidden = state.qi !== 0;
+    $('#qT').textContent = q.title; $('#err3').textContent = '';
+    $('#qBack').textContent = state.qi === 0 ? '경로 고치기' : '이전';
+    $('#qNext').textContent = state.qi === QS.length - 1 ? '제출하고 지도 보기' : '다음';
+    if (q.type === 'choice') {
+      var grp = el('div', 'qbody'); grp.setAttribute('role', 'group'); grp.setAttribute('aria-labelledby', 'qT');
+      var etc = null;
+      q.opts.forEach(function (o) {
+        var b = el('button', 'opt', o.label); b.type = 'button'; b.setAttribute('aria-pressed', String(a[q.key] === o.id));
+        b.onclick = function () {
+          a[q.key] = o.id;
+          Array.prototype.forEach.call(grp.children, function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+          if (etc) etc.hidden = o.id !== 'etc';
+          $('#err3').textContent = '';
+        };
+        grp.appendChild(b);
+      });
+      body.appendChild(grp);
+      if (q.key === 'found') {
+        etc = el('input'); etc.type = 'text'; etc.maxLength = 40; etc.placeholder = '어떤 보물이었나요? (선택)'; etc.setAttribute('aria-label', '기타 보물 설명');
+        etc.value = a.foundNote || ''; etc.hidden = a.found !== 'etc'; etc.oninput = function () { a.foundNote = this.value; };
+        body.appendChild(etc);
+      }
+    } else {
+      var wrap = el('div', 'qbody');
+      wrap.appendChild(el('p', 'hint', q.hint));
+      var ta = el('textarea'); ta.maxLength = 120; ta.placeholder = q.ph; ta.value = a[q.key] || ''; ta.setAttribute('aria-labelledby', 'qT');
+      var cnt = el('span', 'hint', ta.value.length + '/120');
+      ta.oninput = function () { a[q.key] = this.value; cnt.textContent = this.value.length + '/120'; };
+      wrap.appendChild(ta); wrap.appendChild(cnt);
+      body.appendChild(wrap);
+    }
+  }
+  $('#qNext').onclick = function () {
+    var q = QS[state.qi];
+    if (q.type === 'choice' && !state.ans[q.key]) { $('#err3').textContent = '하나를 골라주세요.'; return; }
+    if (state.qi < QS.length - 1) { state.qi++; renderQ(); window.scrollTo(0, 0); return; }
+    submit();
+  };
+  $('#qBack').onclick = function () { if (state.qi === 0) { show('form'); } else { state.qi--; renderQ(); window.scrollTo(0, 0); } };
+
+  async function submit() {
+    var a = state.ans, d = state.draft, btn = $('#qNext');
+    var rec = { nick: '익명의 슈니', name: d.name, lat: Math.round(d.lat * 100) / 100, lng: Math.round(d.lng * 100) / 100, mode: d.mode, minutes: d.minutes,
+      found: pickId(FOUND, a.found), foundNote: a.found === 'etc' ? clean(a.foundNote, 40) : '', place: pickId(PLACE, a.place), feeling: pickId(FEEL, a.feeling),
+      treasure: clean(a.treasure, 120), message: clean(a.message, 120), song: '', createdAt: Date.now() };
+    btn.disabled = true;
+    show('load');
+    var wait = new Promise(function (r) { setTimeout(r, 2200); });
+    var saved = false;
+    if (db && state.canWrite !== false) {
+      try { var ref = await db.collection('commutes').add(rec); state.mineId = ref.id; saved = true; }
+      catch (e) { state.canWrite = false; }
+    }
+    if (!saved) { var id = 'local-' + Date.now(); state.mineId = id; state.local.push(Object.assign({ id: id, local: true }, rec)); }
+    await wait;
+    btn.disabled = false;
+    state.ans = {}; state.qi = 0;
+    show('map');
+  }
+
+  /* ---------- 4. 지도 ---------- */
+  function sanitize(id, o) {
+    if (!o || typeof o !== 'object') return null;
+    var lat = +o.lat, lng = +o.lng, mins = Math.round(+o.minutes);
+    if (!isFinite(lat) || !isFinite(lng) || lat < 33 || lat > 38.9 || lng < 124 || lng > 131) return null;
+    if (!MODE_BY_ID[o.mode]) return null;
+    if (!(mins >= 1)) return null;
+    return { id: String(id), lat: lat, lng: lng, mode: o.mode, minutes: Math.min(mins, 300), nick: clean(o.nick, 12) || '익명의 슈니', name: clean(o.name, 30) || '출발지', message: clean(o.message, 120), song: clean(o.song, 60), found: pickId(FOUND, o.found), foundNote: clean(o.foundNote, 40), place: pickId(PLACE, o.place), feeling: pickId(FEEL, o.feeling), treasure: clean(o.treasure, 120), createdAt: +o.createdAt || 0 };
+  }
+  function allEntries() {
+    var list = state.remote.slice();
+    state.local.forEach(function (e) { list.push(e); });
+    list.forEach(function (e) { e.mine = e.id === state.mineId; });
+    list.sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
+    return list;
+  }
+  function renderAll(fit) {
+    if (state.screen !== 'map') return;
+    var list = allEntries();
+    map.entries = list;
+    var cnt = $('#count'); cnt.textContent = '';
+    if (list.length) { cnt.appendChild(el('b', null, String(list.length))); cnt.appendChild(document.createTextNode('명의 슈니가 서울여대로 오고 있어요')); }
+    $('#mapHint').hidden = !list.length;
+    var note = $('#notice'), msg = '';
+    if (!db) msg = '이 링크에서는 기록을 저장하거나 다른 슈니의 기록을 불러올 수 없어요. 내가 남긴 기록만 이 화면에 보여요.';
+    else if (state.canWrite === false) msg = '이 링크에서는 새 기록을 저장할 권한이 없어서 내 기록은 이 화면에만 보여요. 다른 슈니의 기록은 볼 수 있어요.';
+    else if (state.dbDown) msg = '기록을 불러오지 못했어요. 잠시 후 다시 열어주세요.';
+    note.hidden = !msg; note.textContent = msg;
+    var ul = $('#list'); ul.textContent = '';
+    if (!list.length) ul.appendChild(el('li', 'empty', '아직 도착한 슈니가 없어요. 첫 번째 통학길을 남겨보세요.'));
+    list.forEach(function (e) {
+      var m = MODE_BY_ID[e.mode], li = el('li'), b = el('button', 'item' + (e.id === map.selId ? ' on' : '')); b.type = 'button';
+      var top = el('div', 'top'); if (e.mine) top.appendChild(el('span', 'tag', '내 기록'));
+      top.appendChild(el('span', null, e.nick)); top.appendChild(el('span', null, e.name + ' → ' + m.emoji + ' ' + e.minutes + '분'));
+      b.appendChild(top); b.appendChild(el('p', 'm', e.message));
+      if (e.song) b.appendChild(el('span', 's', '♪ ' + e.song));
+      b.onclick = function () { selectEntry(e, true); window.scrollTo({ top: $('#slot4').getBoundingClientRect().top + window.scrollY - 12, behavior: map.reduce ? 'auto' : 'smooth' }); };
+      li.appendChild(b); ul.appendChild(li);
+    });
+    if (fit) {
+      requestAnimationFrame(function () {
+        map.resize();
+        var pts = list.map(function (e) { return [e.lat, e.lng]; }); pts.push([DEST.lat, DEST.lng]);
+        map.fitTo(METRO, 0);
+        var mine = list.filter(function (e) { return e.mine; })[0];
+        if (mine) selectEntry(mine, false); else hideSel();
+      });
+    }
+  }
+  function hideSel() { $('#sel').hidden = true; map.selId = null; map.invalidate(); }
+  function onHit(e) { selectEntry(e, false); }
+  function selectEntry(e, zoom) {
+    map.selId = e.id;
+    var m = MODE_BY_ID[e.mode], box = $('#sel'); box.textContent = '';
+    var x = el('button', 'x', '✕'); x.type = 'button'; x.setAttribute('aria-label', '닫기'); x.onclick = hideSel;
+    box.appendChild(x);
+    box.appendChild(el('div', 'who', (e.mine ? '내 기록 · ' : '') + e.nick + ' · ' + e.name + ' → ' + m.emoji + ' ' + m.label + ' ' + e.minutes + '분'));
+    box.appendChild(el('p', 'msg', e.message || '(한마디 없음)'));
+    if (e.treasure) box.appendChild(el('div', 'song', '오늘의 작은 보물 · ' + e.treasure));
+    if (e.song) box.appendChild(el('div', 'song', '♪ ' + e.song));
+    box.hidden = false;
+    if (zoom) map.fitTo([[e.lat, e.lng], [DEST.lat, DEST.lng]], 0.35);
+    map.invalidate();
+    Array.prototype.forEach.call(document.querySelectorAll('#list .item'), function (b) { b.classList.remove('on'); });
+  }
+  $('#again').onclick = function () { state.draft = blank(); $('#origin').value = ''; $('#mins').value = ''; syncModes(); show('form'); };
+  $('#zin').onclick = function () { map.zoomBy(1.5); };
+  $('#zout').onclick = function () { map.zoomBy(1 / 1.5); };
+  $('#zfit').onclick = function () { map.fitTo(METRO, 0); };
+
+  /* ---------- 관리 ---------- */
+  var delArm = null, delTimer = null, userApi = null;
+  var modeSel = $('#adminMode');
+  MODES.forEach(function (m) { var o = document.createElement('option'); o.value = m.id; o.textContent = m.emoji + ' ' + m.label; modeSel.appendChild(o); });
+  function fmtTime(ts) {
+    if (!ts) return '';
+    try { return new Date(ts).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }); } catch (e) { return ''; }
+  }
+  function renderAdmin() {
+    if (state.screen !== 'admin') return;
+    var gate = $('#adminGate'), main = $('#adminMain'); gate.textContent = '';
+    $('#adminOut').hidden = true;
+    if (state.isAdmin === null) { gate.appendChild(el('p', 'hint', '권한을 확인하는 중이에요…')); main.hidden = true; return; }
+    if (!state.isAdmin) {
+      main.hidden = true;
+      if (userApi && userApi.signIn) {
+        var who = userApi.who && userApi.who();
+        gate.appendChild(el('p', 'notice', who ? '로그인한 계정(' + who + ')은 관리자가 아니에요. 관리자 계정으로 다시 로그인해주세요.' : '관리자 구글 계정으로 로그인하면 응답을 볼 수 있어요.'));
+        var lb = el('button', 'btn', who ? '다른 계정으로 로그인' : '구글 계정으로 로그인'); lb.type = 'button';
+        lb.onclick = async function () { try { if (who && userApi.signOut) await userApi.signOut(); await userApi.signIn(); } catch (x) { lb.textContent = '로그인하지 못했어요. 다시 눌러주세요.'; } };
+        gate.appendChild(lb);
+      } else {
+        gate.appendChild(el('p', 'notice', '관리 화면은 이 페이지를 편집할 수 있는 사람만 볼 수 있어요.'));
+      }
+      return;
+    }
+    $('#adminOut').hidden = !(userApi && userApi.signOut);
+    if (!db) { gate.appendChild(el('p', 'notice', '저장소에 연결되지 않아 응답을 불러올 수 없어요.')); main.hidden = true; return; }
+    main.hidden = false;
+    var all = state.remote.slice().sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
+    /* 요약 */
+    var sum = $('#adminSum'); sum.textContent = '';
+    var total = all.length, avg = total ? Math.round(all.reduce(function (s, e) { return s + e.minutes; }, 0) / total) : 0;
+    var counts = {}, origins = {};
+    all.forEach(function (e) { counts[e.mode] = (counts[e.mode] || 0) + 1; origins[e.name] = (origins[e.name] || 0) + 1; });
+    var topOrigin = Object.keys(origins).sort(function (a, b) { return origins[b] - origins[a]; })[0];
+    function stat(l, v) { var d = el('div', 'a-stat'); d.appendChild(el('span', 'a-v', v)); d.appendChild(el('span', 'a-l', l)); sum.appendChild(d); }
+    stat('총 응답', String(total)); stat('평균 소요시간', total ? avg + '분' : '-'); stat('가장 많은 출발지', topOrigin ? topOrigin + ' (' + origins[topOrigin] + ')' : '-');
+    var bars = $('#adminBars'); bars.textContent = '';
+    function group(title, arr, key, withEmoji) {
+      var c = {}; all.forEach(function (e) { if (e[key]) c[e[key]] = (c[e[key]] || 0) + 1; });
+      if (!arr.some(function (o) { return c[o.id]; })) return;
+      var mx = Math.max.apply(null, arr.map(function (o) { return c[o.id] || 0; }).concat([1]));
+      bars.appendChild(el('div', 'a-l', title));
+      arr.forEach(function (o) {
+        if (!c[o.id]) return;
+        var r = el('div', 'a-bar'); r.appendChild(el('span', null, (withEmoji ? o.emoji + ' ' : '') + o.label));
+        var i = el('i'); i.style.width = (c[o.id] / mx * 100) + '%'; var w = el('span'); w.appendChild(i); r.appendChild(w);
+        r.appendChild(el('span', null, String(c[o.id]))); bars.appendChild(r);
+      });
+    }
+    group('이동수단', MODES, 'mode', true); group('어떤 보물을 발견했나요', FOUND, 'found'); group('어디에서 발견했나요', PLACE, 'place'); group('발견한 순간의 기분', FEEL, 'feeling');
+    /* 목록 */
+    var q = clean($('#adminQ').value, 40).toLowerCase(), mf = modeSel.value;
+    var rows = all.filter(function (e) {
+      if (mf && e.mode !== mf) return false;
+      return !q || (e.message + ' ' + e.name + ' ' + e.nick + ' ' + e.song + ' ' + e.treasure + ' ' + e.foundNote).toLowerCase().indexOf(q) >= 0;
+    });
+    $('#adminCount').textContent = rows.length === total ? '전체 ' + total + '건' : total + '건 중 ' + rows.length + '건';
+    var list = $('#adminList'); list.textContent = '';
+    if (!rows.length) list.appendChild(el('p', 'empty', total ? '조건에 맞는 응답이 없어요.' : '아직 받은 응답이 없어요.'));
+    rows.forEach(function (e) {
+      var m = MODE_BY_ID[e.mode], r = el('div', 'a-row'), top = el('div', 'top');
+      top.appendChild(el('span', null, fmtTime(e.createdAt))); top.appendChild(el('span', null, e.nick));
+      top.appendChild(el('span', null, e.name + ' → ' + m.emoji + ' ' + m.label + ' ' + e.minutes + '분'));
+      r.appendChild(top); r.appendChild(el('p', 'm', e.message || '(한마디 없음)'));
+      var sv = [labelOf(FOUND, e.found) + (e.foundNote ? '(' + e.foundNote + ')' : ''), labelOf(PLACE, e.place), labelOf(FEEL, e.feeling)].filter(Boolean);
+      if (sv.length) r.appendChild(el('span', 's', '설문 · ' + sv.join(' / ')));
+      if (e.treasure) r.appendChild(el('span', 's', '작은 보물 · ' + e.treasure));
+      if (e.song) r.appendChild(el('span', 's', '♪ ' + e.song));
+      var del = el('button', 'del' + (delArm === e.id ? ' arm' : ''), delArm === e.id ? '정말 삭제' : '삭제'); del.type = 'button';
+      del.onclick = async function () {
+        if (delArm !== e.id) { delArm = e.id; clearTimeout(delTimer); delTimer = setTimeout(function () { delArm = null; renderAdmin(); }, 4000); renderAdmin(); return; }
+        delArm = null; clearTimeout(delTimer);
+        try { await db.collection('commutes').doc(e.id).delete(); $('#adminErr').textContent = ''; }
+        catch (x) { $('#adminErr').textContent = '삭제하지 못했어요. 권한을 확인해주세요.'; renderAdmin(); }
+      };
+      r.appendChild(del); list.appendChild(r);
+    });
+  }
+  $('#adminQ').addEventListener('input', renderAdmin);
+  modeSel.addEventListener('change', renderAdmin);
+  $('#adminBack').onclick = function () { show('map'); };
+  $('#adminOut').onclick = function () { if (userApi && userApi.signOut) userApi.signOut(); };
+  $('#toAdmin').onclick = function () { show('admin'); };
+  function csvCell(v) { v = String(v == null ? '' : v); if (/^[=+\-@\t\r]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; }
+  $('#adminCsv').onclick = async function () {
+    var err = $('#adminErr'); err.textContent = '';
+    var all = state.remote.slice().sort(function (a, b) { return (a.createdAt || 0) - (b.createdAt || 0); });
+    if (!all.length) { err.textContent = '저장할 응답이 아직 없어요.'; return; }
+    var lines = [['시간', '출발지', '이동수단', '소요시간(분)', '1.발견한 보물', '2.발견 장소', '3.기분', '4.오늘 발견한 작은 보물', '5.다음 사람에게 전하는 메시지', '추천곡'].map(csvCell).join(',')];
+    all.forEach(function (e) {
+      lines.push([fmtTime(e.createdAt), e.name, MODE_BY_ID[e.mode].label, e.minutes, labelOf(FOUND, e.found) + (e.foundNote ? ' (' + e.foundNote + ')' : ''), labelOf(PLACE, e.place), labelOf(FEEL, e.feeling), e.treasure, e.message, e.song].map(csvCell).join(','));
+    });
+    var dls = null;
+    try { dls = await claude.use('downloads'); } catch (x) { dls = null; }
+    if (!dls) { err.textContent = '이 화면에서는 파일 저장을 쓸 수 없어요.'; return; }
+    try { await dls.save({ filename: 'shuni-commute.csv', data: '﻿' + lines.join('\r\n') }); }
+    catch (x) { if (!x || x.code !== 'declined') err.textContent = 'CSV를 저장하지 못했어요. 잠시 후 다시 시도해주세요.'; }
+  };
+
+  /* ---------- 저장소 연결 ---------- */
+  state.isAdmin = null;
+  startIntro();
+  show(location.hash === '#admin' ? 'admin' : 'intro');
+  (async function () {
+    if (!window.claude || !claude.use) { state.isAdmin = false; renderAll(false); renderAdmin(); return; }
+    try {
+      db = await claude.use('db');
+      var user = await claude.use('user');
+      if (user && user.can) { var w = user.can('data.write'); if (w === false) state.canWrite = false; }
+      state.isAdmin = !!(user && ((user.canEdit && user.canEdit()) || (user.isOwner && user.isOwner())));
+      userApi = user;
+      if (user && user.onChange) user.onChange(function () {
+        state.isAdmin = !!(user.canEdit && user.canEdit());
+        $('#toAdmin').hidden = !state.isAdmin; renderAdmin();
+      });
+    } catch (e) { db = null; state.isAdmin = false; }
+    $('#toAdmin').hidden = !state.isAdmin;
+    if (!db) { renderAll(false); renderAdmin(); return; }
+    db.collection('commutes').orderBy('createdAt', 'desc').limit(300).onSnapshot(function (snap) {
+      state.dbDown = false;
+      state.remote = snap.docs.map(function (d) { return sanitize(d.id, d.data()); }).filter(Boolean);
+      var first = !state.fitted && state.screen === 'map'; if (state.screen === 'map') state.fitted = true;
+      renderAll(first); renderAdmin();
+    }, function () { state.dbDown = true; renderAll(false); renderAdmin(); });
+  })();
+})();
+</script>
+
+<script type="module">
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCGtrtYkbQYugnpWGEmjn71hN5cnwEhr8I",
+  authDomain: "com-shuni.firebaseapp.com",
+  projectId: "com-shuni",
+  storageBucket: "com-shuni.firebasestorage.app",
+  messagingSenderId: "182134865862",
+  appId: "1:182134865862:web:83b34cdcd2e094eb69fcc7"
+};
+/* 관리 화면을 볼 수 있는 구글 계정 (firestore.rules 의 이메일과 같아야 합니다) */
+const ADMIN_EMAILS = ["c61642906@gmail.com"];
+
+try {
+  const V = "10.12.2", B = "https://www.gstatic.com/firebasejs/" + V + "/";
+  const [appM, fs, au] = await Promise.all([import(B + "firebase-app.js"), import(B + "firebase-firestore.js"), import(B + "firebase-auth.js")]);
+  const app = appM.initializeApp(FIREBASE_CONFIG);
+  const store = fs.getFirestore(app);
+  const auth = au.getAuth(app);
+  const listeners = [];
+  let me = null, first = true;
+  await new Promise(function (resolve) {
+    au.onAuthStateChanged(auth, function (u) {
+      me = u;
+      if (first) { first = false; resolve(); } else { listeners.forEach(function (f) { f(); }); }
+    });
+  });
+  const isAdmin = function () {
+    return !!(me && me.email && me.emailVerified && ADMIN_EMAILS.some(function (e) { return e.toLowerCase() === me.email.toLowerCase(); }));
+  };
+  const col = fs.collection(store, "commutes");
+  const db = {
+    collection: function (name) {
+      if (name !== "commutes") throw new Error("unsupported collection");
+      return {
+        add: function (data) {
+          return Promise.race([fs.addDoc(col, data), new Promise(function (_, rej) { setTimeout(function () { rej({ code: "unavailable" }); }, 8000); })]);
+        },
+        orderBy: function (f, d) {
+          return { limit: function (n) {
+            return { onSnapshot: function (next, err) { return fs.onSnapshot(fs.query(col, fs.orderBy(f, d || "asc"), fs.limit(n)), next, err); } };
+          } };
+        },
+        doc: function (id) { return { delete: function () { return fs.deleteDoc(fs.doc(store, "commutes", id)); } }; }
+      };
+    }
+  };
+  const user = {
+    can: function () { return true; },
+    canEdit: isAdmin, isOwner: isAdmin,
+    who: function () { return me ? me.email : null; },
+    onChange: function (f) { listeners.push(f); },
+    signIn: function () { return au.signInWithPopup(auth, new au.GoogleAuthProvider()); },
+    signOut: function () { return au.signOut(auth); }
+  };
+  const downloads = {
+    save: function (req) {
+      const url = URL.createObjectURL(new Blob([req.data], { type: "text/csv;charset=utf-8" }));
+      const a = document.createElement("a"); a.href = url; a.download = req.filename; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+      return Promise.resolve({ status: "saved" });
+    }
+  };
+  window.__fbResolve({ db: db, user: user, downloads: downloads });
+} catch (e) {
+  console.error("Firebase 연결 실패", e);
+  window.__fbResolve(null);
+}
+</script>
+</body>
+</html>
